@@ -1,0 +1,5 @@
+dotnet ef dbcontext scaffold "Server=DVTL597LKC2;Initial Catalog=FleetDB;Integrated Security=True;" Microsoft.EntityFrameworkCore.SqlServer -o Context -t Vehicle -c FleetDbContext -f
+
+dotnet ef dbcontext scaffold "Server=DVTL597LKC2;Initial Catalog=SSO;Integrated Security=True;" Microsoft.EntityFrameworkCore.SqlServer -o Context -t Users -c SsoDbContext -f
+
+
