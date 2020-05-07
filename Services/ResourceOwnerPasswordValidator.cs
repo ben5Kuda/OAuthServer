@@ -1,5 +1,6 @@
 ﻿using IdentityServer4.Models;
 using IdentityServer4.Validation;
+using IdSrvr4Demo.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -11,10 +12,10 @@ namespace IdSrvr4Demo.Services
 {
   public class ResourceOwnerPasswordValidator : IResourceOwnerPasswordValidator
   {
-    private readonly Context.SsoDbContext _userRepository;  
+    private readonly IUserRepository _userRepository;  
     private readonly ILogger _logger;
 
-    public ResourceOwnerPasswordValidator(Context.SsoDbContext userRepository, ILoggerFactory loggerFactory)
+    public ResourceOwnerPasswordValidator(IUserRepository userRepository, ILoggerFactory loggerFactory)
     {
       _userRepository = userRepository;
       _logger = loggerFactory.CreateLogger("ResourceOwnerPasswordValidator");
@@ -28,16 +29,14 @@ namespace IdSrvr4Demo.Services
     public async Task<ResourceOwnerPasswordValidationContext> ValidatePassword(ResourceOwnerPasswordValidationContext context)
     {
 
-      var user = (from u in _userRepository.Users
-                        where u.Username == context.UserName
-                        select u).FirstOrDefault();
-
-      if (user == null)
+      var isValidCredentials = _userRepository.ValidateCredentials(context.UserName, context.Password);
+      if (!isValidCredentials)
       {
-        // invalid username or password
         context.Result = new GrantValidationResult(TokenRequestErrors.InvalidGrant, "Invalid username or password");
         return context;
       }
+
+      var user = _userRepository.FindUserByUsernameOrEmail(context.UserName);
 
       if (user != null)
       {
@@ -47,49 +46,48 @@ namespace IdSrvr4Demo.Services
           context.Result = new GrantValidationResult(TokenRequestErrors.InvalidGrant, "Account Locked out");
           return context;
         }
-
-        var isValidPassword = user.Password == context.Password;
-
+      
         //user exists but incorrect password
-        if (!isValidPassword)
+        if (!isValidCredentials)
         {         
 
           if (user.PasswordRetryCount < 3)
           {
             user.PasswordRetryCount = user.PasswordRetryCount + 1;
-            _userRepository.Entry(user).State = EntityState.Modified;
+            _userRepository.Update(user);
 
-            await _userRepository.SaveChangesAsync();
+             _userRepository.Save();
           }
 
           if (user.PasswordRetryCount >= 3)
           {
             user.IsLockedOut = true;
 
-            _userRepository.Entry(user).State = EntityState.Modified;
-            await _userRepository.SaveChangesAsync();
+            _userRepository.Update(user);
+            _userRepository.Save();
           }
 
           context.Result = new GrantValidationResult(TokenRequestErrors.InvalidGrant, "Invalid username or password");
           return context;
         }
       
-        if (isValidPassword)
+        if (isValidCredentials)
         {
           user.PasswordRetryCount = 0;
           user.IsLockedOut = false;
 
-          _userRepository.Entry(user).State = EntityState.Modified;
-          await _userRepository.SaveChangesAsync();
+          _userRepository.Update(user);
+          _userRepository.Save();
 
           //set the result
           context.Result = new GrantValidationResult(
                     subject: user.UsersId.ToString(),
-                    identityProvider: "ssodb",
+                    identityProvider: "sso",
                     authenticationMethod: "password",
                     claims: null);
 
-          _logger.LogInformation("Password validation completed");
+          await Task.Factory.StartNew(() => _logger.LogInformation("Password validation completed"));
+        
         }
       }
 

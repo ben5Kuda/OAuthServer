@@ -2,6 +2,8 @@
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdSrvr4Demo.Context;
+using IdSrvr4Demo.Models;
+using IdSrvr4Demo.Repositories;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,9 +14,9 @@ namespace IdSrvr4Demo.Services
 {
   public class ProfileService : IProfileService
   {
-    private readonly SsoDbContext _userRepository;
+    private readonly IUserRepository _userRepository;
 
-    public ProfileService(SsoDbContext userRepository)
+    public ProfileService(IUserRepository userRepository)
     {
       _userRepository = userRepository;
     }
@@ -25,7 +27,7 @@ namespace IdSrvr4Demo.Services
       if (!string.IsNullOrEmpty(context.Subject.Identity.Name))
        {
         //get user from db (in my case this is by email)
-        var user = _userRepository.Users.Where(u => u.Username == context.Subject.Identity.Name).FirstOrDefault();
+        var user = _userRepository.GetUserByKey(10);
 
         if (user != null)
         {
@@ -44,7 +46,7 @@ namespace IdSrvr4Demo.Services
         if (!string.IsNullOrEmpty(userId?.Value) && long.Parse(userId.Value) > 0)
         {
           //get user from db (find user by user id)
-          var user = _userRepository.Users.Where(u => u.UsersId == userId.Value).FirstOrDefault();
+          var user = _userRepository.GetUserByKey(10);
 
           // issue the claims for the user
           if (user != null)
@@ -58,7 +60,7 @@ namespace IdSrvr4Demo.Services
       return Task.FromResult(context);
     }
 
-    public static List<Claim> GetUserClaims(Users user)
+    public static List<Claim> GetUserClaims(User user)
     {
       //IEnumerable<string> roles = new List<string>() { "2", "5", "21" };
       var claims = new Claim[]
@@ -66,8 +68,7 @@ namespace IdSrvr4Demo.Services
             new Claim(JwtClaimTypes.Subject, user.UsersId.ToString() ?? ""),
             new Claim("unique_name", user.Username.ToString() ?? ""),
             new Claim(JwtClaimTypes.Name, user.Name),         
-            new Claim(JwtClaimTypes.FamilyName, user.Surname  ?? ""),
-            new Claim(JwtClaimTypes.Role, user.Profile),
+            new Claim(JwtClaimTypes.Profile, user.Profile  ?? ""),          
           
       };
 

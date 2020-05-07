@@ -18,6 +18,8 @@ using IdentityServer4.Services;
 using System.Security.Cryptography.X509Certificates;
 using IdSrvr4Demo.Settings;
 using IdentityServer4;
+using IdSrvr4Demo.Repositories;
+using IdentityServer.Web.ConfigStores;
 
 namespace IdSrvr4Demo
 {
@@ -41,35 +43,35 @@ namespace IdSrvr4Demo
                .AllowAnyMethod()
                .AllowAnyHeader();
       }));
-
-     // services.AddDbContext<SsoDbContext>(options => options.UseSqlServer(_configuration.GetConnectionString("SsoDbContext")));
-     
-      services.AddSingleton(_configuration.GetSection("Redirects").Get<Redirects>());
-
+       
       services.AddIdentityServer()
              .AddDeveloperSigningCredential()
-              //.AddSigningCredential(GetClientCertificate("idsrv3test"))
-              .AddTestUsers(TestUsers.Users)
+              //.AddSigningCredential(GetClientCertificate("idsrv3test"))              
               .AddInMemoryPersistedGrants()
-              .AddInMemoryIdentityResources(Config.GetIdentityResources())
-              .AddInMemoryApiResources(Config.GetApiResources())
-              .AddInMemoryClients(Config.GetClients());
-              //.AddResourceOwnerValidator<ResourceOwnerPasswordValidator>()
-              //.AddProfileService<ProfileService>();
+              .AddResourceStore<ResourcesStore>()
+              .AddClientStore<ClientStore>()
+              .AddResourceOwnerValidator<ResourceOwnerPasswordValidator>()
+              .AddProfileService<ProfileService>();
 
       // Inject services
-      //services.AddTransient<IResourceOwnerPasswordValidator, ResourceOwnerPasswordValidator>();
-      //services.AddTransient<IProfileService, ProfileService>();
+      services.AddTransient<IResourceOwnerPasswordValidator, ResourceOwnerPasswordValidator>();
+      services.AddTransient<IProfileService, ProfileService>();
+
+      services.AddScoped(typeof(IUserRepository), typeof(UserRepository));
+
+      services.AddSingleton(_configuration.GetSection("GoogleCredentials").Get<GoogleSettings>());
+      services.AddSingleton(_configuration.GetSection("FacebookCredentials").Get<FacebookCredentials>());
 
       services.AddAuthentication()
      .AddGoogle("Google", options =>
      {
        options.SignInScheme = IdentityServerConstants.ExternalCookieAuthenticationScheme;
 
-       options.ClientId = "351458037122-7vq9ilu6gm7easirls57bmpk216g2l6m.apps.googleusercontent.com";
-       options.ClientSecret = "EVgMoIpS7WahHmm5zqvTmnK6";
+       options.ClientId = GoogleSettings.ClientId;
+       options.ClientSecret =GoogleSettings.CLientSecret;
      });
 
+      // this only works on local
       services.AddAuthentication()
       .AddFacebook(facebookOptions =>
       {

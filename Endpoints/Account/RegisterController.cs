@@ -133,7 +133,7 @@ namespace IdSrvr4Demo.Endpoints.Account
 
         await _userRepository.SaveChangesAsync();
 
-        SendEmail(model.Email); //decouple this
+      //  SendEmail(model.Email); //decouple this
 
       }
 

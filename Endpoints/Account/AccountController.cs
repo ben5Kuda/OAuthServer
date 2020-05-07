@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using IdSrvr4Demo.Context;
 using Microsoft.Extensions.Logging;
 using IdSrvr4Demo.Endpoints.Account;
+using IdSrvr4Demo.Repositories;
 
 namespace IdentityServer4.Quickstart.UI
 {
@@ -38,13 +39,19 @@ namespace IdentityServer4.Quickstart.UI
     private readonly IAuthenticationSchemeProvider _schemeProvider;
     private readonly IEventService _events;
     private readonly ILoggerFactory _loggerfactory = new LoggerFactory();
+    private readonly ILogger _logger;
+    private readonly IResourceOwnerPasswordValidator _resourceOwnerPasswordValidation;
+    private readonly IUserRepository _userRepository;
 
 
     public AccountController(
         IIdentityServerInteractionService interaction,
         IClientStore clientStore,
         IAuthenticationSchemeProvider schemeProvider,
-        IEventService events
+        IEventService events,
+        ILoggerFactory loggerFactory,
+        IResourceOwnerPasswordValidator resourceOwnerPasswordValidator,
+        IUserRepository userRepository
       )
     {
       // if the TestUserStore is not in DI, then we'll just use the global users collection
@@ -55,7 +62,9 @@ namespace IdentityServer4.Quickstart.UI
       _clientStore = clientStore;
       _schemeProvider = schemeProvider;
       _events = events;
-      //_resourceOwnerPasswordValidation = new ResourceOwnerPasswordValidator(_userRepository, _loggerfactory);
+      _logger = loggerFactory.CreateLogger("Account");
+      _userRepository = userRepository;
+      _resourceOwnerPasswordValidation = resourceOwnerPasswordValidator;
     }
 
     /// <summary>
@@ -64,10 +73,7 @@ namespace IdentityServer4.Quickstart.UI
     [HttpGet]
     public async Task<IActionResult> Login(string returnUrl)
     {
-      // var context = await _interaction.GetAuthorizationContextAsync(returnUrl);
-      // Client client = await _clientStore.FindClientByIdAsync(context.ClientId);
-      //var name = client.ClientName;
-
+      
       // build a model so we know what to show on the login page
       var vm = await BuildLoginViewModelAsync(returnUrl);
 
@@ -90,13 +96,9 @@ namespace IdentityServer4.Quickstart.UI
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(LoginInputModel model, string button)
     {
-      // check if we are in the context of an authorization request
       var context = await _interaction.GetAuthorizationContextAsync(model.ReturnUrl);
+      _logger.LogInformation("displaying login options");
 
-      if (button == "register")
-      {
-        return View("Register");
-      }
       // the user clicked the "cancel" button
       if (button != "login")
       {
@@ -124,61 +126,89 @@ namespace IdentityServer4.Quickstart.UI
         }
       }
 
-      var user = new TestUser();
-
-      await _events.RaiseAsync(new UserLoginSuccessEvent(model.Username, "sub", model.Username));
-
-      // only set explicit expiration here if user chooses "remember me". 
-      // otherwise we rely upon expiration configured in cookie middleware.
-      AuthenticationProperties props = null;
-      if (AccountOptions.AllowRememberLogin && model.RememberLogin)
+      if (ModelState.IsValid)
       {
-        props = new AuthenticationProperties
+        ResourceOwnerPasswordValidationContext ValidationContext = new ResourceOwnerPasswordValidationContext
         {
-          IsPersistent = true,
-          ExpiresUtc = DateTimeOffset.UtcNow.Add(AccountOptions.RememberMeLoginDuration)
+          UserName = model.Username,
+          Password = model.Password,
         };
-      };
+       // _logger.LogInformation("Setting up validation context for user");
 
+        var passwordValidator = _resourceOwnerPasswordValidation as ResourceOwnerPasswordValidator;
 
-      // issue authentication cookie with subject ID and username
-      await HttpContext.SignInAsync("sub", user.Username, "ssodb", props, new System.Security.Claims.Claim("sub", "104"));
+        ValidationContext = await passwordValidator.ValidatePassword(ValidationContext);
 
-      if (context != null)
-      {
-        if (await _clientStore.IsPkceClientAsync(context.ClientId))
+        _logger.LogInformation("Validation process started");
+
+        // validate username/password against in-memory store
+        if (ValidationContext.Result != null)
         {
-          // if the client is PKCE then we assume it's native, so this change in how to
-          // return the response is for better UX for the end user.
-          return View("Redirect", new RedirectViewModel { RedirectUrl = model.ReturnUrl });
+          if (ValidationContext.Result.Subject != null)
+          {
+            if (ValidationContext.Result.Subject.Identity.IsAuthenticated)
+            {
+              _logger.LogInformation("Validation process succesfully retrieved authenticated user");
+              var user = _userRepository.FindUserByUsernameOrEmail(model.Username);
+
+              await _events.RaiseAsync(new UserLoginSuccessEvent(model.Username, ValidationContext.Result.Subject.ToString(), model.Username));
+
+              // only set explicit expiration here if user chooses "remember me". 
+              // otherwise we rely upon expiration configured in cookie middleware.
+              AuthenticationProperties props = null;
+              if (AccountOptions.AllowRememberLogin && model.RememberLogin)
+              {
+                props = new AuthenticationProperties
+                {
+                  IsPersistent = true,
+                  ExpiresUtc = DateTimeOffset.UtcNow.Add(AccountOptions.RememberMeLoginDuration)
+                };
+              };            
+           
+              var claims = ProfileService.GetUserClaims(user);
+              // issue authentication cookie with subject ID and username
+              _logger.LogInformation("Issuing authentication cookie");
+              await HttpContext.SignInAsync(user.UsersId.ToString(), user.Username, "sso", props, claims.ToArray());
+
+              if (context != null)
+              {
+                if (await _clientStore.IsPkceClientAsync(context.ClientId))
+                {
+                  // if the client is PKCE then we assume it's native, so this change in how to
+                  // return the response is for better UX for the end user.
+                  return View("Redirect", new RedirectViewModel { RedirectUrl = model.ReturnUrl });
+                }
+
+                // we can trust model.ReturnUrl since GetAuthorizationContextAsync returned non-null
+                return Redirect(model.ReturnUrl);
+              }
+
+              // request for a local page
+              if (Url.IsLocalUrl(model.ReturnUrl))
+              {
+                return Redirect(model.ReturnUrl);
+              }
+              else if (string.IsNullOrEmpty(model.ReturnUrl))
+              {
+                return Redirect("~/");
+              }
+              else
+              {
+                // user might have clicked on a malicious link - should be logged
+                throw new Exception("invalid return URL");
+              }
+            }
+          }
         }
-
-        // we can trust model.ReturnUrl since GetAuthorizationContextAsync returned non-null
-        return Redirect(model.ReturnUrl);
+        await _events.RaiseAsync(new UserLoginFailureEvent(model.Username, "invalid credentials"));
+        ModelState.AddModelError(string.Empty, ValidationContext.Result.ErrorDescription);
       }
-
-
-      // request for a local page
-      if (Url.IsLocalUrl(model.ReturnUrl))
-      {
-        return Redirect(model.ReturnUrl);
-      }
-      else if (string.IsNullOrEmpty(model.ReturnUrl))
-      {
-        return Redirect("~/");
-      }     
-   
-
-      await _events.RaiseAsync(new UserLoginFailureEvent(model.Username, "invalid credentials"));
-      ModelState.AddModelError(string.Empty, "Some error");
-
-
       // something went wrong, show form with error
       var vm = await BuildLoginViewModelAsync(model);
       return View(vm);
-
     }
 
+     
 
     /// <summary>
     /// Show logout page
