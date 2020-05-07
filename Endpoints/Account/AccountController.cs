@@ -133,7 +133,7 @@ namespace IdentityServer4.Quickstart.UI
           UserName = model.Username,
           Password = model.Password,
         };
-       // _logger.LogInformation("Setting up validation context for user");
+        _logger.LogInformation("Setting up validation context for user");
 
         var passwordValidator = _resourceOwnerPasswordValidation as ResourceOwnerPasswordValidator;
 

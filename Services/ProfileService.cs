@@ -26,7 +26,7 @@ namespace IdSrvr4Demo.Services
       // depending on the scope accessing the user data.
       if (!string.IsNullOrEmpty(context.Subject.Identity.Name))
        {
-        //get user from db (in my case this is by email)
+        //get user from db (in my case this is by key)
         var user = _userRepository.GetUserByKey(10);
 
         if (user != null)
@@ -46,7 +46,7 @@ namespace IdSrvr4Demo.Services
         if (!string.IsNullOrEmpty(userId?.Value) && long.Parse(userId.Value) > 0)
         {
           //get user from db (find user by user id)
-          var user = _userRepository.GetUserByKey(10);
+          var user = _userRepository.GetUserByKey(int.Parse(userId.Value));
 
           // issue the claims for the user
           if (user != null)
