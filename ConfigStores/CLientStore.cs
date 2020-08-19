@@ -63,6 +63,7 @@
                       AccessTokenLifetime = c.AccessTokenLifetime,
                       AllowOfflineAccess = c.AllowOfflineAccess, //refresh tokens
                       AccessTokenType = AccessTokenType.Jwt,
+                      UpdateAccessTokenClaimsOnRefresh = true,
                       AbsoluteRefreshTokenLifetime = c.AbsoluteRefreshTokenLifetime,
                       AllowedGrantTypes = c.AllowedGrantTypes?.Select(x => x.Name).ToList(),
                       AllowedCorsOrigins = c.AllowedCorsOrigins?.Select(x => x.Name).ToList(),
