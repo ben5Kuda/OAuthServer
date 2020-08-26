@@ -1,4 +1,6 @@
-﻿namespace IdSrvr4Demo.Endpoints
+﻿using IdentityServer.Web.ConfigStores.Models;
+
+namespace IdSrvr4Demo.Endpoints
 {
   using IdentityModel;
   using IdentityServer4;
@@ -19,7 +21,8 @@
       var customProfile = new IdentityResource(
          name: "custom.profile",
          displayName: "Custom profile",
-         claimTypes: new[] { "unique_name", "given_name", "family_name", "email" });
+         userClaims: new[] { "unique_name", "given_name", "family_name", "email" }
+         );
 
       return new List<IdentityResource>
             {
@@ -36,7 +39,7 @@
       return new List<ApiResource>
             {
                 new ApiResource{
-                  Scopes = { new Scope("access") },
+                  Scopes = { "access" },
                   Enabled = true,
 
                    UserClaims = {
@@ -91,7 +94,7 @@
                     AccessTokenType = AccessTokenType.Jwt,
                     AlwaysIncludeUserClaimsInIdToken = true,
                     AccessTokenLifetime = 3600,
-                    Claims = new List<Claim>
+                    Claims = new List<ClientClaim>
                     {},
                     ClientSecrets =
                     {

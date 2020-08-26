@@ -82,7 +82,7 @@ namespace IdSrvr4Demo
         facebookOptions.SignInScheme = IdentityServerConstants.ExternalCookieAuthenticationScheme;
 
       });
-      services.AddMvc();
+      services.AddMvc(options =>options.EnableEndpointRouting = false );
 
     }
 
